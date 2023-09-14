@@ -59,10 +59,14 @@ function [startingPoints, destinationPoints, maxSpeeds] = load_scenario(scenario
             destinationPoints = [52 51 51 26 3  42 27 25 26 47];
             maxSpeeds =         [5  18 20 7  14 10 0.1 4 10 10];
         case 'Rans'
-            startingPoints =    [84 85 33 17  7 4 6 81 82 83];
+            startingPoints =    [46 47 33 17  7 4 6 81 82 83];
             destinationPoints = [52 51 51 26 3  42 27 25 26 47];
             maxSpeeds =         [5  18 20 7  14 10 0.1 4 10 10];
-
+        case 'Rans2'
+            % road merging scenario
+            startingPoints =    [81 82 83 84 80 53 6 7 22 45];
+            destinationPoints = [13 15 18 11 26 40 17 32 16 10];
+            maxSpeeds =         [13 13 11 9 13 13 8 14 4 13];
     end
     
 end

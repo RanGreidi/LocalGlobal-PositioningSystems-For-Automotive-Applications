@@ -96,7 +96,21 @@ classdef Infrastructure < matlab.System & handle & matlab.system.mixin.Propagate
                 obj.map.Vehicles(1,i).V2V_dist.all_vehicles_GPS = every_car_GPS_in_the_time_sample;
             end
             
-            if mod(obj.getCurrentTime,0.2) == 0
+%             % write to vehicale instance the aproximation for veichales
+%             % that was calculated by cluster head
+%             for i = 1:length(obj.map.Vehicles)
+%                 if  ~isempty(obj.map.Vehicles(1,i).V2V_dist.in_cluster)
+%                     in_cluster = obj.map.Vehicles(1,i).V2V_dist.in_cluster;
+%                     Cluster_aprox  = obj.map.Vehicles(1,i).logger.Cluster_aprox;
+%                     counter = 1;
+%                     for j = in_cluster
+%                         obj.map.Vehicles(1,j).dynamics.ML_aprox = Cluster_aprox(counter,:);
+%                         counter = counter + 1;
+%                     end
+%                 end
+%             end            
+            
+            if mod(obj.getCurrentTime,0.02) == 0
                 obj.map.dynamicTrafficPlot(); % Update Vehicle locations and speeds
                 
                 if mod(obj.getCurrentTime,1) == 0

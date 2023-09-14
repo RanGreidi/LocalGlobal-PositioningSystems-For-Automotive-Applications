@@ -174,6 +174,7 @@ classdef Map < handle
             hold on
             obj.plots.Vehicles = scatter([],[],40,'filled', 'MarkerFaceColor',[0.7 0 0],'MarkerEdgeColor','k'); % Size of the vehicle bubbles            
             obj.plots.VehiclesGPS = scatter([],[],40,'filled', 'MarkerFaceColor',[0 1 1],'MarkerEdgeColor','k'); % Size of the vehicle bubbles            
+            obj.plots.VehiclesAPROX = scatter([],[],40,'filled','Marker','square',  'MarkerFaceColor',[0.5 1 1],'MarkerEdgeColor','k'); % Size of the vehicle bubbles            
             hold off
 
         end
@@ -198,7 +199,8 @@ classdef Map < handle
             
             allVehiclePositions = cat(1,cat(1,obj.Vehicles.dynamics).position);
             allVehicleGPS = cat(1,cat(1,obj.Vehicles.dynamics).GPS);
-
+            allVehicleAprox = cat(1,cat(1,obj.Vehicles.dynamics).ML_aprox);
+            
             % Vehicles' 2D scatter plot circle positions
             obj.plots.Vehicles.XData = allVehiclePositions(:,1);
             obj.plots.Vehicles.YData = -allVehiclePositions(:,3);
@@ -206,6 +208,10 @@ classdef Map < handle
             % Vehicles' 2D scatter plot GPS positions
             obj.plots.VehiclesGPS.XData = allVehicleGPS(:,1);
             obj.plots.VehiclesGPS.YData = -allVehicleGPS(:,3);
+
+            % Vehicles' 2D scatter plot APROX positions
+            obj.plots.VehiclesAPROX.XData = allVehicleAprox(:,1);
+            obj.plots.VehiclesAPROX.YData = -allVehicleAprox(:,2);            
             
             % Vehicles' Annotation String
             speedArray = compose("%4.1f", [cat(1,obj.Vehicles.dynamics).speed]);

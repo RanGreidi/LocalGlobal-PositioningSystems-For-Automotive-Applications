@@ -97,6 +97,7 @@ classdef Vehicle < handle
             
             obj.dynamics.position = [0 0 0];
             obj.dynamics.GPS = [0 0 0];
+            obj.dynamics.ML_aprox = [0 0 0];
             obj.dynamics.speed = 0;
             obj.dynamics.maxSpeed =maxSpeed;
             obj.dynamics.orientation = [0 1 0 0];
@@ -107,6 +108,8 @@ classdef Vehicle < handle
             obj.logger.position = [0 0 0];
             obj.logger.GPS = [0 0 0];    
             obj.logger.all_vehicles_position = [];
+            obj.logger.Cluster_aprox = [];
+            obj.logger.self_aprox = [];
             
             obj.sensors.safeDistance = 5;
             obj.sensors.frontSensorRange            = frontSensorRange;
@@ -149,6 +152,7 @@ classdef Vehicle < handle
             obj.V2V_dist.dist_mat = [];
             obj.V2V_dist.all_vehicles_position = [];           
             obj.V2V_dist.all_vehicles_GPS = [];           
+            obj.V2V_dist.in_cluster = [];
             
             obj.V2VdataLink = dataLinkV2V;
             obj.V2IdataLink = dataLinkV2I;
@@ -413,7 +417,7 @@ classdef Vehicle < handle
         end
         
         function setPosition(car,newPosition)    
-            sigma_i = 2;
+            sigma_i = 16;%2
             GPS_newPosition = newPosition + [sigma_i*randn ,0 ,sigma_i*randn ];
             
             car.logger.position = cat(1 ,car.logger.position ,newPosition);
@@ -426,6 +430,7 @@ classdef Vehicle < handle
             %build distance matrix V2V for each vehicle from
             %all_vehicel_position
             if ~isempty(car.V2V_dist.all_vehicles_position)
+
                 distance_matrix_V2V = [];
                 for i = 1:length(car.V2V_dist.all_vehicles_position(:,1))
                     vehicle_i_pos = car.V2V_dist.all_vehicles_position(i,:);
@@ -437,7 +442,7 @@ classdef Vehicle < handle
                         distance_matrix_V2V(i,j) = distance_ij;
                     end
                 
-                sigma_ij =1;
+                sigma_ij = 8;%1
                 e_ij = sigma_ij * randn(size(distance_matrix_V2V));
                 car.V2V_dist.dist_mat = distance_matrix_V2V + e_ij;
                 end
@@ -447,7 +452,7 @@ classdef Vehicle < handle
                 G = car.V2V_dist.all_vehicles_GPS;            
                 
                 %decide who is in the cluster
-                Cluster_dist = 200;
+                Cluster_dist = 100;
                 in_cluster = [];
                 for i = 1:length(G)
                     vehicle_i_pos = G(i,:);
@@ -457,97 +462,114 @@ classdef Vehicle < handle
                         in_cluster = [in_cluster i]; 
                     end                    
                 end
-                all_combo = combntns(in_cluster,2); %all veichale in cluster
-                R_temp = zeros(length(G)) + inf;
-                for i=1:length(all_combo(:,1))
-                    pos = all_combo(i,:);
-                    i_ = pos(1) ; j_ = pos(2);                    
-                    R_temp(i_,j_) = R(i_,j_);
-                    R_temp(j_,i_) = R(i_,j_);
-                end
-                for i=in_cluster
-                    R_temp(i,i) = 0;
+                if length(in_cluster) ~= 1                   
+                    all_combo = combntns(in_cluster,2); %all veichale in cluster
+                    R_temp = zeros(length(G)) + inf;
+                    for i=1:length(all_combo(:,1))
+                        pos = all_combo(i,:);
+                        i_ = pos(1) ; j_ = pos(2);                    
+                        R_temp(i_,j_) = R(i_,j_);
+                        R_temp(j_,i_) = R(i_,j_);
+                    end
+                    for i=in_cluster
+                        R_temp(i,i) = 0;
+                    end
+                else
+                    R_temp = zeros(length(G)) + inf;
+                    for i=in_cluster
+                        R_temp(i,i) = 0;
+                    end
                 end
                 R = R_temp;
                 car.V2V_dist.dist_mat = R;
                 
-                %max likelyhood via gridsearch
                 
-                min_ML = inf;                 
-                car_loc = newPosition; %[10 15];
-                grid_size = 150;  %length of the box to grid search at
-                Num_of_cars = length(in_cluster);
-                resulotion = 10;%1;%0.01;
+            %if car.id == in_cluster(1) %let only the first car in cluster make the grid search and estimation 
+            %max likelyhood via gridsearch                
+            car.V2V_dist.in_cluster = in_cluster; %only cluster head have in_clister list
+            min_ML = inf;                 
+            car_loc = GPS_newPosition; %[10 15];
+            grid_size = 100;  %length of the box to grid search at
+            Num_of_cars = length(in_cluster);
+            resulotion = 10;%1;%0.01;
 
-                init_car_loc = [car_loc(1)-grid_size/2 car_loc(3)-grid_size/2];
-                v  = repmat(init_car_loc,1,Num_of_cars);
-                ready = false;
-                while ~ready
-                  P = reshape(v,[2,Num_of_cars])';
-                  %disp(P)
-                  
-                  %---make lilklyhood function here using P---  
-                  
-                  %first_sum
-                  first_sum = 0;
-                  indx = 1;
-                  for i= in_cluster
-                      GPS_loc = [G(i,1) G(i,3)];
-                      p = P(indx,:);
-                      indx=indx+1;
-                      first_sum = first_sum + ((norm(p-GPS_loc))^2)/sigma_i;
-                  end                  
-                  %second sum
-                  indx_i=1;
-                  second_sum = 0;
-                  for i= in_cluster 
-                      p_i = P(indx_i,:);
-                      indx_j=1;
-                      for j= in_cluster 
-                          p_j = P(indx_j,:);
-                          second_sum = second_sum + ((norm(p_i-p_j)-R(i,j))^2) / (2*sigma_ij^2); 
-                          indx_j=indx_j+1;
-                      end
-                      indx_i=indx_i+1;
-                  end
-                  ML_p = second_sum + first_sum; %Likleyhood function
-                  
-                  if ML_p < min_ML
-                      min_ML = ML_p;
-                      argmin_ML = P;
-                      min_LF = ML_p;
-                      disp(min_LF)
-                      disp(argmin_ML)
-                  end
-                  
-                  %---calc new P for grid search---
-                  ready = true;       % Assume that the WHILE loop is ready
-                  for k = 1:1:length(v)
-                    v(k) = v(k) + resulotion;
-                    if mod(k,2) ~= 0 %x axis for boundry
-                         if v(k) <= init_car_loc(1)+grid_size
-                          ready = false;  % WHILE loop is not ready now
-                          break;          % v(k) increased successfully, leave "for k" loop
-                        end       
-                    end    
+            init_car_loc = [car_loc(1)-grid_size/2 car_loc(3)-grid_size/2];
+            v  = repmat(init_car_loc,1,Num_of_cars);
+            ready = false;
+            while ~ready
+              P = reshape(v,[2,Num_of_cars])';
+              %disp(P)
 
-                    if mod(k,2) == 0 %y axis for boundry
-                        if v(k) <= init_car_loc(2)+grid_size
-                          ready = false;  % WHILE loop is not ready now
-                          break;          % v(k) increased successfully, leave "for k" loop
-                        end
+              %---make lilklyhood function here using P---  
+
+              %first_sum
+              first_sum = 0;
+              indx = 1;
+              for i= in_cluster
+                  GPS_loc = [G(i,1) G(i,3)];
+                  p = P(indx,:);
+                  indx=indx+1;
+                  first_sum = first_sum + ((norm(p-GPS_loc))^2)/sigma_i;
+              end                  
+              %second sum
+              indx_i=1;
+              second_sum = 0;
+              for i = in_cluster 
+                  p_i = P(indx_i,:);
+                  indx_j=1;
+                  for j= in_cluster 
+                      p_j = P(indx_j,:);
+                      second_sum = second_sum + ((norm(p_i-p_j)-R(i,j))^2) / (2*sigma_ij^2); 
+                      indx_j=indx_j+1;
+                  end
+                  indx_i=indx_i+1;
+              end
+              ML_p = second_sum + first_sum; %Likleyhood function
+
+              if ML_p < min_ML
+                  min_ML = ML_p;
+                  argmin_ML = P;
+                  min_LF = ML_p;
+                  disp(min_LF)
+                  disp(argmin_ML)
+              end
+
+              %---calc new P for grid search---
+              ready = true;       % Assume that the WHILE loop is ready
+              for k = 1:1:length(v)
+                v(k) = v(k) + resulotion;
+                if mod(k,2) ~= 0 %x axis for boundry
+                     if v(k) <= init_car_loc(1) + grid_size
+                      ready = false;  % WHILE loop is not ready now
+                      break;          % v(k) increased successfully, leave "for k" loop
+                    end       
+                end    
+
+                if mod(k,2) == 0 %y axis for boundry
+                    if v(k) <= init_car_loc(2)+grid_size
+                      ready = false;  % WHILE loop is not ready now
+                      break;          % v(k) increased successfully, leave "for k" loop
                     end
+                end
 
 
-                    if mod(k,2) ~= 0
-                        v(k) = init_car_loc(1);
-                    end
-                    if mod(k,2) == 0
-                        v(k) = init_car_loc(2);
-                    end    
-                  end
-                end       
-            %break point here to check algo
+                if mod(k,2) ~= 0
+                    v(k) = init_car_loc(1);
+                end
+                if mod(k,2) == 0
+                    v(k) = init_car_loc(2);
+                end    
+               end    
+            end
+
+        car.logger.Cluster_aprox = argmin_ML;
+        %assign p_i to viachle dynmics
+        indx = find(car.V2V_dist.in_cluster==car.id);
+        car.dynamics.ML_aprox = argmin_ML(indx,:); 
+        car.logger.self_aprox = cat(1 ,car.logger.self_aprox ,car.dynamics.ML_aprox);
+        %end assign
+        %break point here to check algo        
+            %end
             end                 
         end
         function setInitialRouteAndTrajectory(car)
